@@ -1,0 +1,38 @@
+version: '3.7'
+services:
+    db:
+        image: postgres
+        container_name: image-db
+        environment:
+            # - POSTGRES_PORT=${DB_PORT}
+            - POSTGRES_USER=postgres  
+            - POSTGRES_PASSWORD=very-secret-db-password
+            
+        expose:
+            - 5432
+        volumes:
+            - ./db_init.sql:/docker-entrypoint-initdb.d/db_init.sql
+        # networks:
+        #     - internal
+    server:
+        container_name: image-server
+        build:
+            context: ./
+            dockerfile: Dockerfile
+        command: bash -c "go build -o backend && ./backend"
+        # volumes:
+        #     - './server:/app/backend'
+        # expose:
+        #     - 8000
+        ports: 
+            - '8000:8000'
+        depends_on: 
+            - db
+        # networks:
+        #     - internal
+        stdin_open: true
+volumes:
+    db:  
+# networks:
+#     internal:
+#       driver: bridge
