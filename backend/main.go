@@ -3,14 +3,15 @@ package main
 import (
 	"net/http"
 	"log"
-	// "fmt"
+	"fmt"
+	"os"
 	"context"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/gorilla/mux"
-	// "github.com/aws/aws-sdk-go/aws"
-	// "github.com/aws/aws-sdk-go/aws/session"
-	// "github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	// "github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
@@ -20,11 +21,23 @@ func main () {
 	server := Server{}
 
 	// s3 initialization 
+	s3_region := os.Getenv("REGION")
+	server.s3_bucket = os.Getenv("BUCKET_NAME")
+	server.s3_session = s3.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(s3_region),
+	})))
+	log.Print("s3 session initiated")
 
-	// db initialization
-	opt, err := pg.ParseURL("postgres://postgres:very-secret-db-password@image-db:5432/postgres?sslmode=disable")
+	// db initialization    
+	db_user := os.Getenv("DB_USER")
+	db_name := os.Getenv("DB_NAME")
+	db_port := os.Getenv("DB_PORT")
+	db_host := os.Getenv("DB_HOST")
+	db_password := os.Getenv("DB_PASSWORD")
+
+	opt, err := pg.ParseURL(fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", db_user, db_password, db_host, db_port, db_name))
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to create db connection url %s", err)
 	}
 
 	server.db = pg.Connect(opt)
@@ -32,7 +45,7 @@ func main () {
 	if err := server.db.Ping(context.Background()); err != nil {
 		log.Fatalf("failed to connect to db %s", err)
 	} else {
-		log.Print("db connection established!")
+		log.Print("db connection established")
 	}
 	
 	// routes
@@ -40,10 +53,11 @@ func main () {
 
 	server.r.HandleFunc("/login", server.Login).Methods("POST")
 	server.r.HandleFunc("/signup", server.Signup).Methods("POST")
-	server.r.HandleFunc("/addImages", server.AddImages).Methods("POST")
-	server.r.HandleFunc("/deleteImage", server.DeleteImage).Methods("POST")
-	server.r.HandleFunc("/search", server.SearchImage).Methods("GET")
+	server.r.HandleFunc("/image", server.AddImage).Methods("PUT")
+	server.r.HandleFunc("/image", server.DeleteImage).Methods("DELETE")
+	server.r.HandleFunc("/images", server.SearchImages).Methods("GET")
+	server.r.Use(server.AuthMiddleware)
 
-	log.Print("Listening on port 8000")
+	log.Print("listening on port 8000")
 	log.Fatal(http.ListenAndServe(":8000", server.r))
 }

@@ -4,35 +4,34 @@ services:
         image: postgres
         container_name: image-db
         environment:
-            # - POSTGRES_PORT=${DB_PORT}
             - POSTGRES_USER=postgres  
-            - POSTGRES_PASSWORD=very-secret-db-password
-            
+            - POSTGRES_PASSWORD=very_secret_db_password         
         expose:
             - 5432
         volumes:
             - ./db_init.sql:/docker-entrypoint-initdb.d/db_init.sql
-        # networks:
-        #     - internal
+
     server:
         container_name: image-server
         build:
             context: ./
             dockerfile: Dockerfile
         command: bash -c "go build -o backend && ./backend"
-        # volumes:
-        #     - './server:/app/backend'
-        # expose:
-        #     - 8000
         ports: 
             - '8000:8000'
         depends_on: 
             - db
-        # networks:
-        #     - internal
+        environment: 
+            # keys have very limited permissions and will be deleted
+            - AWS_ACCESS_KEY_ID=AKIA2Q75ROVWAJB4IGNZ
+            - AWS_SECRET_ACCESS_KEY=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
+            - REGION=us-east-2
+            - BUCKET_NAME=sids-shopify-w22-bucket
+            - DB_USER=postgres
+            - DB_NAME=postgres
+            - DB_HOST=image-db
+            - DB_PORT=5432
+            - DB_PASSWORD=very_secret_db_password
         stdin_open: true
 volumes:
     db:  
-# networks:
-#     internal:
-#       driver: bridge

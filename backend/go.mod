@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/aws/aws-sdk-go v1.40.45 // indirect
+	github.com/dchest/uniuri v0.0.0-20200228104902-7aecb25e1fe5 // indirect
 	github.com/go-pg/pg/v10 v10.10.5 // indirect
 	github.com/go-pg/zerochecker v0.2.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
