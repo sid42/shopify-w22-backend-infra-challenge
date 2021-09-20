@@ -53,6 +53,21 @@ func getTokenFomHeader(r http.Request) (string, error) {
 	}
 }
 
+func getTokenClaims(r http.Request) (jwt.Claims, error) {
+	var encoded_token string
+	var err error
+	if encoded_token, err = getTokenFomHeader(r); err != nil {
+		return nil, fmt.Errorf("error in auth")
+	}
+
+	var token *jwt.Token
+	if token, err = jwt.Parse(encoded_token, checkSigningMethod); err != nil {
+		return nil, fmt.Errorf("error in auth")
+	}
+
+	return token.Claims, nil
+}
+
 func checkSigningMethod(token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 		return nil, fmt.Errorf("Error occured")
@@ -67,18 +82,17 @@ func (s *Server) Signup(w http.ResponseWriter, r *http.Request) {
 	//check if user with provided email already exists
 	var res User
 	err := s.db.Model(&res).
-	Where("email = ?", u.Email).
-	Select()
+		Where("email = ?", u.Email).
+		Select()
 
 	if errors.Is(err, pg.ErrNoRows) && u.Email != "" {
 		_, err = s.db.Model(&u).Insert()
 		if err != nil {
-			log.Fatalf("error inserting user in database %s", err)
+			log.Printf("error inserting user in database %s", err)
 		}
 
-		resp := Token{Token: generateTokenString(u)}
 		log.Print("successfully created user account")
-		json.NewEncoder(w).Encode(resp)
+		json.NewEncoder(w).Encode(Token{Token: generateTokenString(u)})
 	
 	} else {
 		http.Error(w, "User with provided e-mail already exists or is invalid", http.StatusConflict)
@@ -91,135 +105,159 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 	var res User
 	err := s.db.Model(&res).
-	Where("email = ?", u.Email).
-	Where("password = ?", u.Password).
-	Select()
+		Where("email = ?", u.Email).
+		Where("password = ?", u.Password).
+		Select()
 
 	if err != nil || res == (User{}){
 		http.Error(w, "Invalid login credentials", http.StatusUnauthorized)
 	} else {
-		tokenString := generateTokenString(res)
 		log.Print("successfully logged in")
-		json.NewEncoder(w).Encode(Token{Token: tokenString})
+		json.NewEncoder(w).Encode(Token{Token: generateTokenString(res)})
 	}
 
 }
 
 func (s *Server) AddImage(w http.ResponseWriter, r *http.Request) {
-	var encoded_token string
-	var err error
-	if encoded_token, err = getTokenFomHeader(*r); err != nil {
-		http.Error(w, "Error uploading image", http.StatusInternalServerError)
-		return
-	}
-
-	var token *jwt.Token
-	if token, err = jwt.Parse(encoded_token, checkSigningMethod); err != nil {
-		http.Error(w, "Error uploading image", http.StatusInternalServerError)
-		return
-	}
-	email := token.Claims.(jwt.MapClaims)["Email"].(string)
-
-	file, header, err := r.FormFile("image")
+	claims, err := getTokenClaims(*r)
 	if err != nil {
-		http.Error(w, "Error uploading image", http.StatusInternalServerError)
+		http.Error(w, "Auth error", http.StatusInternalServerError)
+	}
+	email := claims.(jwt.MapClaims)["Email"].(string)
+
+	// parse multiform 
+	log.Print("parsing form")
+	if err = r.ParseMultipartForm(1 << 15); err != nil {
+		http.Error(w, "Error uploading image, request too big", http.StatusBadRequest)
+		return
+	} 
+
+	if len(r.MultipartForm.File) == 0 || len(r.MultipartForm.File) > 10 {
+		http.Error(w, "Invalid number of files to upload", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
-
-	// split filename by '.' to obtain file type 
-	file_type := strings.Split(header.Filename, ".")
-	// generate random url for image to allow multiple uploads of same file
-	key := fmt.Sprintf("%s.%s", uniuri.New(), file_type[len(file_type) - 1])
-	log.Printf("filename: %s size: %d KB", key, header.Size/1024)
 	
-	// persist image to bucket
-	_, err = s.s3_session.PutObject(&s3.PutObjectInput{
-		Bucket: aws.String(s.s3_bucket),
-		Key:    aws.String(key),
-		Body:   file,
-	})
-	if err != nil {
-		http.Error(w, "Error uploading image", http.StatusInternalServerError)
-		return
+	var keys []string
+	for form_key, _ := range r.MultipartForm.File {
+		log.Printf("Uploading %s", form_key)
+
+		file, header, err := r.FormFile(form_key)
+		if err != nil {
+			http.Error(w, "Error uploading image", http.StatusInternalServerError)
+			return
+		}
+
+		file_type := strings.Split(header.Filename, ".")
+		// generate random url for image to allow multiple uploads of same file
+		key := fmt.Sprintf("%s.%s", uniuri.New(), file_type[len(file_type) - 1])
+		log.Printf("filename: %s size: %d KB", key, header.Size/1024)
+		
+		// persist image to bucket
+		_, err = s.s3_session.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String(s.s3_bucket),
+			Key:    aws.String(key),
+			Body:   file,
+		})
+		if err != nil {
+			http.Error(w, "Error uploading image", http.StatusInternalServerError)
+			return
+		}
+		
+		keys = append(keys, key)
+		file.Close()
 	}
 
 	// insert into database
-	i := Image {
-		Key : key,
-		UserEmail : email, 
+	var images []Image
+	var ids ImageIds
+	for _, key := range keys {
+		images = append(images, Image{
+			Key: key,
+			UserEmail: email, 
+		})
 	}
-	_, err = s.db.Model(&i).Returning("id").Insert()
+	_, err = s.db.Model(&images).Returning("id").Insert()
 	if err != nil {
 		http.Error(w, "Error uploading image", http.StatusInternalServerError)
 		return
 	}
 
-	log.Print("successfully added image")
+	// encode and send ids to client
+	for _, i := range images {
+		ids.Ids = append(ids.Ids, i.Id)
+	}
+
+	log.Print("successfully added images")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(i)
+	json.NewEncoder(w).Encode(ids)
 }
 
 func (s *Server) DeleteImage(w http.ResponseWriter, r *http.Request) {
-	var i Image
-	if err := json.NewDecoder(r.Body).Decode(&i); err != nil {
+	claims, err := getTokenClaims(*r)
+	if err != nil {
+		http.Error(w, "Auth error", http.StatusInternalServerError)
+	}
+	email := claims.(jwt.MapClaims)["Email"].(string)
+
+	var ids ImageIds
+	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
 		http.Error(w, "Invalid input", http.StatusBadRequest)
 		return
 	}
 
-	var encoded_token string
-	var err error
-	if encoded_token, err = getTokenFomHeader(*r); err != nil {
-		http.Error(w, "Error deleting image", http.StatusInternalServerError)
+	if len(ids.Ids) == 0 {
+		http.Error(w, "No images to delete", http.StatusBadRequest)
 		return
 	}
-
-	var token *jwt.Token
-	if token, err = jwt.Parse(encoded_token, checkSigningMethod); err != nil {
-		http.Error(w, "Error deleting image", http.StatusInternalServerError)
-		return
-	}
-
-	email := token.Claims.(jwt.MapClaims)["Email"].(string)
-	if err := s.db.Model(&i).WherePK().Select(); err != nil {
+	
+	// check if deleting another user's images
+	var images []Image		
+	if err := s.db.Model(&images).Where("id in (?)", pg.In(ids.Ids)).Select(); err != nil {
 		http.Error(w, "Error deleting image", http.StatusInternalServerError)
 		return
 	} 
 
-	// no permission to delete another user's image
-	if i.UserEmail != email {
-		http.Error(w, "Unable to delete another user's image", http.StatusUnauthorized)
-		return
+	for _, i := range images {
+		if i.UserEmail != email {
+			http.Error(w, "Unable to delete another user's image", http.StatusUnauthorized)
+			return
+		}
 	}
 
-	log.Printf("deleting %s", i.Key)
-
-	// delete from s3 bucket
-	_, err = s.s3_session.DeleteObject(&s3.DeleteObjectInput{
-		Bucket: aws.String(s.s3_bucket),
-		Key: aws.String(i.Key),
-	})
-	if err != nil {
-		http.Error(w, "Error deleting image", http.StatusInternalServerError)
+	if len(images) != len(ids.Ids) {
+		http.Error(w, "Image does not exist", http.StatusBadRequest)
 		return
+	}
+	// delete from bucket 
+	for _, i := range images {
+		log.Printf("deleting %s", i.Key)
+		_, err = s.s3_session.DeleteObject(&s3.DeleteObjectInput{
+			Bucket: aws.String(s.s3_bucket),
+			Key: aws.String(i.Key),
+		})
+		if err != nil {
+			http.Error(w, "Error deleting image", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// delete from db 
-	_, err = s.db.Model(&i).WherePK().Delete()	
+	_, err = s.db.Model(&images).Where("id in (?)", pg.In(ids.Ids)).Delete()	
 	if err != nil {
 		http.Error(w, "Error deleting image", http.StatusInternalServerError)
 		return
 	}
 
-	log.Print("Succesfully deleted image")
+	log.Print("succesfully deleted images")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode("Succesfully deleted image")
+	json.NewEncoder(w).Encode("Succesfully deleted images")
 }
 
 func (s *Server) SearchImages(w http.ResponseWriter, r *http.Request) {
-	// by user
-	// by latest
-	// by tags? 
+	// // by id 
+	// // by user
+	// if len(filter.byUser) > 0
+	// qry.Where("user_email IN ?", userEmails)
 }
 
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {

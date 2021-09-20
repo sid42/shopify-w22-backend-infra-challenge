@@ -31,6 +31,10 @@ type Image struct {
 	CreatedAt 	time.Time `json:"-"`
 }
 
+type ImageIds struct {
+	Ids		[]string `json:"ids"`
+}
+
 type Token struct {
 	Token	string `json:"token"`
 }
