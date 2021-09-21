@@ -53,9 +53,10 @@ func main () {
 
 	server.r.HandleFunc("/login", server.Login).Methods("POST")
 	server.r.HandleFunc("/signup", server.Signup).Methods("POST")
-	server.r.HandleFunc("/image", server.AddImage).Methods("PUT")
-	server.r.HandleFunc("/image", server.DeleteImage).Methods("DELETE")
-	server.r.HandleFunc("/images", server.SearchImages).Methods("GET")
+	server.r.HandleFunc("/images", server.AddImages).Methods("PUT")
+	server.r.HandleFunc("/images", server.DeleteImages).Methods("DELETE")
+	server.r.HandleFunc("/image", server.FetchImage).Methods("GET")
+	server.r.HandleFunc("/search", server.SearchImages).Methods("GET")
 	server.r.Use(server.AuthMiddleware)
 
 	log.Print("listening on port 8000")

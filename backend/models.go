@@ -35,10 +35,10 @@ type ImageIds struct {
 	Ids		[]string `json:"ids"`
 }
 
+type SearchImageRequest struct {
+	ByEmails	[]string `json:"by_emails"`
+}
+
 type Token struct {
 	Token	string `json:"token"`
 }
-
-// type Error struct {
-// 	Error 	string `json:"error"`
-// }

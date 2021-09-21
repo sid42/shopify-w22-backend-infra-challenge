@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"fmt"
 	"log"
 	"strings"
@@ -26,9 +27,9 @@ func generateTokenString(user User) string {
 	})
 	
 	//signing the token to get token string to be sent to user 
-	encoded_token, tokenErr := token.SignedString([]byte(signing_key))
-	if tokenErr != nil {
-		panic(tokenErr)
+	encoded_token, err := token.SignedString([]byte(signing_key))
+	if err != nil {
+		log.Fatalf("error while generating token %s", err)
 	}
 
 	return encoded_token
@@ -118,7 +119,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (s *Server) AddImage(w http.ResponseWriter, r *http.Request) {
+func (s *Server) AddImages(w http.ResponseWriter, r *http.Request) {
 	claims, err := getTokenClaims(*r)
 	if err != nil {
 		http.Error(w, "Auth error", http.StatusInternalServerError)
@@ -192,7 +193,7 @@ func (s *Server) AddImage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ids)
 }
 
-func (s *Server) DeleteImage(w http.ResponseWriter, r *http.Request) {
+func (s *Server) DeleteImages(w http.ResponseWriter, r *http.Request) {
 	claims, err := getTokenClaims(*r)
 	if err != nil {
 		http.Error(w, "Auth error", http.StatusInternalServerError)
@@ -223,11 +224,11 @@ func (s *Server) DeleteImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 	if len(images) != len(ids.Ids) {
 		http.Error(w, "Image does not exist", http.StatusBadRequest)
 		return
 	}
+
 	// delete from bucket 
 	for _, i := range images {
 		log.Printf("deleting %s", i.Key)
@@ -254,10 +255,77 @@ func (s *Server) DeleteImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) SearchImages(w http.ResponseWriter, r *http.Request) {
-	// // by id 
-	// // by user
-	// if len(filter.byUser) > 0
-	// qry.Where("user_email IN ?", userEmails)
+	var filter SearchImageRequest
+	if err := json.NewDecoder(r.Body).Decode(&filter); err != nil {
+		http.Error(w, "Invalid input", http.StatusBadRequest)
+		return
+	}
+
+	if len(filter.ByEmails) == 0 {
+		http.Error(w, "No search input", http.StatusBadRequest)
+		return
+	}
+
+	var ids ImageIds
+	var images []Image
+	err := s.db.Model(&images).
+		Where("user_email in (?)", pg.In(filter.ByEmails)).
+		OrderExpr("created_at ASC").
+		Select()
+
+	if err != nil {
+		if errors.Is(err, pg.ErrNoRows) {
+			http.Error(w, "No images found", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Error searching for image", http.StatusInternalServerError)
+		return
+	}
+	
+	log.Printf("number of images found %d", len(images))
+	for _, i := range images {
+		ids.Ids = append(ids.Ids, i.Id)
+	}
+	
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(ids)
+}
+
+func (s *Server) FetchImage(w http.ResponseWriter, r *http.Request) {
+	var i Image
+	if err := json.NewDecoder(r.Body).Decode(&i); err != nil {
+		http.Error(w, "Invalid input", http.StatusBadRequest)
+		return
+	}
+	
+	if err := s.db.Model(&i).WherePK().Select(); err != nil {
+		if errors.Is(err, pg.ErrNoRows) {
+			http.Error(w, "No image found with given id", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Error fetching image", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("fetching %s", i.Key)
+	resp, err := s.s3_session.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(s.s3_bucket),
+		Key: aws.String(i.Key),
+	})
+	if err != nil {
+		http.Error(w, "Error searching for image", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("writing fetched file")
+	_, err = io.Copy(w, resp.Body)
+	if err != nil {
+		http.Error(w, "Error searching for image", http.StatusInternalServerError)
+		return
+	}
+
+	log.Print("succesfully fetched image")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
