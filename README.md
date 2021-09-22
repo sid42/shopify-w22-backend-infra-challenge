@@ -3,7 +3,7 @@
 
 Hi! This is my submission for Shopify's backend challenge. This repo contains the code and instructions to run and test an image repository API.
 
-This API allows users to sign up and upload, delete and search for images in bulk, all while being secured and authenticated by JWT tokens. This project is written in Go and uses PostgreSQL as its primary database. Image artifacts are stored in AWS S3 buckets and is run using Docker containers.
+This API allows users to sign up and upload, delete and search for images in bulk, all while being secured and authenticated by JWT tokens. This project is written in Go and uses PostgreSQL as its primary database. Image artifacts are stored in AWS S3 buckets.
 
 ### Features
 
