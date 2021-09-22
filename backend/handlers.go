@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dchest/uniuri"
+	"github.com/gorilla/mux"
 )
 
 const (
@@ -96,6 +97,7 @@ func (s *Server) Signup(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(Token{Token: generateTokenString(u)})
 	
 	} else {
+		log.Printf("error signup up %s %s", err, u.Email)
 		http.Error(w, "User with provided e-mail already exists or is invalid", http.StatusConflict)
 	}
 }
@@ -270,7 +272,7 @@ func (s *Server) SearchImages(w http.ResponseWriter, r *http.Request) {
 	var images []Image
 	err := s.db.Model(&images).
 		Where("user_email in (?)", pg.In(filter.ByEmails)).
-		OrderExpr("created_at ASC").
+		OrderExpr("created_at DESC").
 		Select()
 
 	if err != nil {
@@ -292,12 +294,11 @@ func (s *Server) SearchImages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) FetchImage(w http.ResponseWriter, r *http.Request) {
-	var i Image
-	if err := json.NewDecoder(r.Body).Decode(&i); err != nil {
-		http.Error(w, "Invalid input", http.StatusBadRequest)
-		return
+	id := mux.Vars(r)["id"]
+	i := Image{
+		Id: id,
 	}
-	
+
 	if err := s.db.Model(&i).WherePK().Select(); err != nil {
 		if errors.Is(err, pg.ErrNoRows) {
 			http.Error(w, "No image found with given id", http.StatusBadRequest)
@@ -325,7 +326,6 @@ func (s *Server) FetchImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Print("succesfully fetched image")
-	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {

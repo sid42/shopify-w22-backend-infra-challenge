@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	// "github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 func main () { 
@@ -55,7 +54,7 @@ func main () {
 	server.r.HandleFunc("/signup", server.Signup).Methods("POST")
 	server.r.HandleFunc("/images", server.AddImages).Methods("PUT")
 	server.r.HandleFunc("/images", server.DeleteImages).Methods("DELETE")
-	server.r.HandleFunc("/image", server.FetchImage).Methods("GET")
+	server.r.HandleFunc("/image/{id}", server.FetchImage).Methods("GET")
 	server.r.HandleFunc("/search", server.SearchImages).Methods("GET")
 	server.r.Use(server.AuthMiddleware)
 
