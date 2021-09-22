@@ -22,7 +22,7 @@ The image repository API can now be accessed at `localhost:8000`
 To stop the containers, press `ctrl + c` and run `docker-compose down` to remove the containers. 
 
 ### Operations
-Please visit https://documenter.getpostman.com/view/13042235/UUxuj9xn to see detailed documentation on all operations and instructions on how to test the API. 
+Please visit [this Postman doc](https://documenter.getpostman.com/view/13042235/UUxuj9xn) to see detailed documentation on all operations and instructions on how to test the API using Postman, cURL or other tools.  
 - `POST /signup`: Create an account
 - `POST /login`: Log into an account
 - `PUT /images`: Upload images
