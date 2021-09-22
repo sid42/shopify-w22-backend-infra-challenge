@@ -136,7 +136,7 @@ func (s *Server) AddImages(w http.ResponseWriter, r *http.Request) {
 	} 
 
 	if len(r.MultipartForm.File) == 0 || len(r.MultipartForm.File) > 10 {
-		http.Error(w, "Invalid number of files to upload", http.StatusBadRequest)
+		http.Error(w, "Invalid number of files to upload, please make sure to add between 1 and 10 files", http.StatusBadRequest)
 		return
 	}
 	
