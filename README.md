@@ -31,7 +31,3 @@ Please visit [this Postman doc](https://documenter.getpostman.com/view/13042235/
 - `GET /search`: Search for images by user IDs
 - `GET /image/{id}`: Fetches the requested image
 
-
-Bengali Sweets! As a Bengali, I can comfortably say the demand for Bengali sweets in Canada is very high amongst the Bengali diaspora, so much so that my friends and family try to squeeze in as many treats in their suitcases on their return flights to Toronto from Kolkata! And the demand is definitely not unwarranted - the softness of a Rasgulla, a round treat soaked in a sugar solution and the creaminess of a Chom-Chom are absolutely to die for. It is not uncommon to be served a Rasgulla alongside a cup of tea when you are a guest at someone's home in Kolkata or Dhaka. 
-
-I'd love to share this gift of Bengal with Canadians. Brown folk and other minorities are generally considered as monoliths and there's very little interest in learning more about different cultures, languages and foods. Hopefully, a warm Chom-Chom delivered straight to the customer's door through a Shopify store would allow us to shed light on the beautiful things present in every culture. 
